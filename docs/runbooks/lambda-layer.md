@@ -59,7 +59,9 @@ loudly**:
 
 This is expected — no infra-only job builds the layer. **Run this
 repository's artifact-publish CI job at least once first** (`dd-chain-explorer`,
-target=`prod`). It builds `dm-chain-utils` from source, computes its sha256,
+`publish-artifacts.yml`, environment `dev` or `hml` — the artifact is
+environment-agnostic, content-addressed by sha256; no `prod` lane exists until
+the production Databricks environment does). It builds `dm-chain-utils` from source, computes its sha256,
 uploads it to
 `s3://dm-chain-explorer-artifacts/lambda-layers/dm-chain-utils/<sha256>.zip`
 with `sha256=<sha256>` object metadata, assuming only the
@@ -72,8 +74,8 @@ Every infra-only job run after that can resolve it.
 1. Confirm the failure is `resolve_layer.sh`'s "No lambda-layer artifact
    found" (not an unrelated Terraform error) — read the failing step's log,
    in `dd-chain-infrastructure`.
-2. Run this repository's (`dd-chain-explorer`) artifact-publish CI job with
-   `target: prod` from the Actions tab.
+2. Run this repository's (`dd-chain-explorer`) artifact-publish CI job
+   (`publish-artifacts.yml`, environment `dev` or `hml`) from the Actions tab.
 3. Confirm the object landed:
    ```
    aws s3api list-objects-v2 \
