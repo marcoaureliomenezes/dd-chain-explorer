@@ -6,6 +6,18 @@ records the software-engineer-owned remediations applied to `.github/workflows/*
 protection, Actions allow-list, Dependabot toggles) are operator actions and are not
 repeated here.
 
+**Re-pointed at v0.6.0 (T-L.3):** this runbook migrated from the legacy single-repo
+platform and documents an audit of the workflows/scripts that existed there.
+`scripts/ci/**` and every Terraform-facing workflow this document names
+(`deploy_cloud_infra.yml`, `destroy_cloud_infra.yml`, `destroy_all_cloud_infra.yml`,
+`drift_detection.yml`, `plan_on_pr.yml`) now live in the separate
+`dd-chain-infrastructure` repository, along with every `services/**` path referenced
+below. `deploy_all_dm_applications.yml` DIES with the legacy repository (superseded) —
+its build/deploy responsibilities are split across this repository's own CI (layer +
+handler-zip publish, DABs validate/deploy) and `dd-chain-infrastructure`'s CI (Lambda
+Terraform apply). The remediations recorded here (F-01 through F-12) describe the
+posture each successor workflow inherited, not a live workflow in this repository.
+
 ## F-01 — never upload the `tfplan` binary as a public artifact
 
 **Why this mattered.** `terraform plan -out=tfplan` writes a binary plan file that
