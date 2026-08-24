@@ -1,0 +1,207 @@
+name: Publish Artifacts
+
+# The PRODUCER half of the cross-repo artifact seam (docs/cross-repo-contract.md §3,
+# T-X.5, v0.6.0 three-repo segregation). Builds the dm-chain-utils Lambda layer and
+# both handler zips from source, uploads each to its content-addressed key under the
+# artifacts bucket, and emits each <sha256> as a run output. Assumes ONLY the
+# …-gha-artifacts-publish role (docs/cross-repo-contract.md §4) — no Terraform state
+# access, no Lambda/IAM permission of any kind, no role beyond this one.
+#
+# `dd-chain-infrastructure`'s scripts/ci/resolve_layer.sh (and its per-prefix sibling
+# for handler zips, T-I.4) is the RESOLVER — it only lists the newest object under a
+# prefix; it never builds or uploads. This workflow never touches Terraform.
+#
+# Two ways to run:
+#   - workflow_dispatch, choosing the GitHub environment to bind the run to (dev|hml).
+#   - workflow_call, reused by .github/workflows/ci.yml's `publish` job (T-X.6) so the
+#     explorer CI's own push-triggered lane shares this exact implementation instead
+#     of a second copy (no drift between "the producer workflow" and "the CI that
+#     calls it").
+#
+# No `prod` choice: no prod Databricks/AWS environment is provisioned yet (ADR-002);
+# this run binds only to `dev`/`hml`, matching apps/dabs's own dev/hml-only CI-deploy
+# scope (T-X.7) and docs/cross-repo-contract.md §4's role trust for this repository.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "GitHub environment to bind this publish run to"
+        required: true
+        default: dev
+        type: choice
+        options: [dev, hml]
+  workflow_call:
+    inputs:
+      target:
+        description: "GitHub environment to bind this publish run to"
+        required: true
+        type: string
+    outputs:
+      layer_key:
+        description: "Content-addressed S3 key of the dm-chain-utils layer zip"
+        value: ${{ jobs.publish.outputs.layer_key }}
+      layer_sha256:
+        description: "sha256 (hex) of the dm-chain-utils layer zip"
+        value: ${{ jobs.publish.outputs.layer_sha256 }}
+      contracts_ingestion_key:
+        description: "Content-addressed S3 key of the contracts_ingestion handler zip"
+        value: ${{ jobs.publish.outputs.contracts_ingestion_key }}
+      contracts_ingestion_sha256:
+        description: "sha256 (hex) of the contracts_ingestion handler zip"
+        value: ${{ jobs.publish.outputs.contracts_ingestion_sha256 }}
+      gold_to_dynamodb_key:
+        description: "Content-addressed S3 key of the gold_to_dynamodb handler zip"
+        value: ${{ jobs.publish.outputs.gold_to_dynamodb_key }}
+      gold_to_dynamodb_sha256:
+        description: "sha256 (hex) of the gold_to_dynamodb handler zip"
+        value: ${{ jobs.publish.outputs.gold_to_dynamodb_sha256 }}
+
+permissions:
+  contents: read  # id-token: write is granted only on the job that needs it
+
+env:
+  AWS_REGION:         sa-east-1
+  ARTIFACTS_BUCKET:   dm-chain-explorer-artifacts
+  LAMBDA_DIR:         apps/lambda
+  UTILS_DIR:          utils
+  REPRODUCIBLE_MTIME: "2026-01-01 00:00:00"
+
+jobs:
+
+  # ── Producer: build layer + both handler zips, upload content-addressed ────
+  publish:
+    name: Build + publish artifacts (${{ inputs.target }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target }}
+    permissions:
+      contents: read
+      id-token: write  # needed to assume …-gha-artifacts-publish via OIDC
+    timeout-minutes: 30
+    concurrency:
+      group: publish-artifacts-${{ inputs.target }}
+      cancel-in-progress: false
+    outputs:
+      layer_key:                  ${{ steps.layer.outputs.key }}
+      layer_sha256:                ${{ steps.layer.outputs.sha256 }}
+      contracts_ingestion_key:     ${{ steps.contracts_ingestion.outputs.key }}
+      contracts_ingestion_sha256:  ${{ steps.contracts_ingestion.outputs.sha256 }}
+      gold_to_dynamodb_key:        ${{ steps.gold_to_dynamodb.outputs.key }}
+      gold_to_dynamodb_sha256:     ${{ steps.gold_to_dynamodb.outputs.sha256 }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Preflight — publish-role variable must exist
+        run: |
+          if [ -z "${{ vars.AWS_ARTIFACTS_PUBLISH_ROLE }}" ]; then
+            echo "::error::AWS_ARTIFACTS_PUBLISH_ROLE is not set on this repository/environment. It is created and trust-repointed by dd-chain-infrastructure's services/prd/00_bootstrap stack (operator-applied only) — see docs/cross-repo-contract.md §4."
+            exit 1
+          fi
+          echo "AWS_ARTIFACTS_PUBLISH_ROLE present — OK."
+
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4.3.1
+        with:
+          role-to-assume:     ${{ vars.AWS_ARTIFACTS_PUBLISH_ROLE }}
+          aws-region:          ${{ env.AWS_REGION }}
+          role-session-name:   gha-publish-artifacts-publish
+          mask-aws-account-id: true
+
+      # ── Layer: from-source build (scripts/build_lambda_layer.sh already
+      # produces a reproducible, content-addressed zip: hash-pinned third-party
+      # deps via --require-hashes, dm_chain_utils installed as a --no-deps PATH
+      # requirement — the mechanic that closes dependency confusion) ─────────
+      - name: Build layer (from source, reproducible)
+        id: layer-build
+        run: |
+          set -euo pipefail
+          OUT="$(bash "$GITHUB_WORKSPACE/scripts/build_lambda_layer.sh" | tail -1)"
+          echo "${OUT}"
+          {
+            echo "zip_path=$(echo "${OUT}" | grep -oP 'LAYER_ZIP=\K\S+')"
+            echo "sha256_hex=$(echo "${OUT}" | grep -oP 'LAYER_SHA256=\K\S+')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve layer key
+        id: layer
+        env:
+          SHA256: ${{ steps.layer-build.outputs.sha256_hex }}
+        run: |
+          set -euo pipefail
+          echo "key=lambda-layers/dm-chain-utils/${SHA256}.zip" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload layer (skip if the content-addressed key already exists)
+        env:
+          BUCKET:   ${{ env.ARTIFACTS_BUCKET }}
+          KEY:      ${{ steps.layer.outputs.key }}
+          ZIP_PATH: ${{ steps.layer-build.outputs.zip_path }}
+          SHA256:   ${{ steps.layer.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          if aws s3api head-object --bucket "${BUCKET}" --key "${KEY}" >/dev/null 2>&1; then
+            echo "Object s3://${BUCKET}/${KEY} already exists — skipping upload (content-addressed)."
+          else
+            aws s3 cp "${ZIP_PATH}" "s3://${BUCKET}/${KEY}" --metadata "sha256=${SHA256}"
+          fi
+
+      # ── Handler zips: apps/lambda/<function>/handler.py, zipped alone at the
+      # zip root — mirrors the legacy Terraform archive_file byte layout
+      # (services/prd/06_lambda/{lambda,lambda_contracts_ingestion}.tf: `type =
+      # "zip", source_file = handler.py`, single-file entry, basename kept) —
+      # and built reproducibly (fixed mtime, `zip -X -q`) the same way
+      # scripts/build_lambda_layer.sh builds the layer, so an unchanged handler
+      # always re-derives the same key and the upload step below skips it. ────
+      - name: Build + publish contracts_ingestion handler zip
+        id: contracts_ingestion
+        env:
+          FUNCTION: contracts_ingestion
+          BUCKET:   ${{ env.ARTIFACTS_BUCKET }}
+        run: |
+          set -euo pipefail
+          BUILD_DIR="$(mktemp -d)"
+          cp "${LAMBDA_DIR}/${FUNCTION}/handler.py" "${BUILD_DIR}/handler.py"
+          touch -d "${REPRODUCIBLE_MTIME}" "${BUILD_DIR}/handler.py"
+          ZIP_PATH="$(mktemp -u --suffix=.zip)"
+          ( cd "${BUILD_DIR}" && zip -X -q "${ZIP_PATH}" handler.py )
+          SHA256="$(sha256sum "${ZIP_PATH}" | awk '{print $1}')"
+          KEY="lambda-handlers/${FUNCTION}/${SHA256}.zip"
+          echo "key=${KEY}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+          if aws s3api head-object --bucket "${BUCKET}" --key "${KEY}" >/dev/null 2>&1; then
+            echo "Object s3://${BUCKET}/${KEY} already exists — skipping upload (content-addressed)."
+          else
+            aws s3 cp "${ZIP_PATH}" "s3://${BUCKET}/${KEY}" --metadata "sha256=${SHA256}"
+          fi
+
+      - name: Build + publish gold_to_dynamodb handler zip
+        id: gold_to_dynamodb
+        env:
+          FUNCTION: gold_to_dynamodb
+          BUCKET:   ${{ env.ARTIFACTS_BUCKET }}
+        run: |
+          set -euo pipefail
+          BUILD_DIR="$(mktemp -d)"
+          cp "${LAMBDA_DIR}/${FUNCTION}/handler.py" "${BUILD_DIR}/handler.py"
+          touch -d "${REPRODUCIBLE_MTIME}" "${BUILD_DIR}/handler.py"
+          ZIP_PATH="$(mktemp -u --suffix=.zip)"
+          ( cd "${BUILD_DIR}" && zip -X -q "${ZIP_PATH}" handler.py )
+          SHA256="$(sha256sum "${ZIP_PATH}" | awk '{print $1}')"
+          KEY="lambda-handlers/${FUNCTION}/${SHA256}.zip"
+          echo "key=${KEY}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+          if aws s3api head-object --bucket "${BUCKET}" --key "${KEY}" >/dev/null 2>&1; then
+            echo "Object s3://${BUCKET}/${KEY} already exists — skipping upload (content-addressed)."
+          else
+            aws s3 cp "${ZIP_PATH}" "s3://${BUCKET}/${KEY}" --metadata "sha256=${SHA256}"
+          fi
