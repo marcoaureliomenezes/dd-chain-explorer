@@ -1,0 +1,248 @@
+name: CI
+
+# The explorer CI (T-X.6, v0.6.0 three-repo segregation): this repository declares
+# no infrastructure (AGENTS.md) and no Terraform workflow travels here — Terraform
+# lives in the separate dd-chain-infrastructure repository. This workflow owns:
+#
+#   1. quality        — ruff format --check, ruff check, mypy, pytest, pip-audit,
+#                        actionlint + zizmor on this repo's own two workflows.
+#   2. bundle-validate — `databricks bundle validate` per bundle per target: dev and
+#                        hml must succeed; prod must FAIL (its workspace.host is
+#                        deliberately unset, ADR-002 — no prod Databricks workspace
+#                        exists yet) — validate only, never a deploy, in CI.
+#   3. publish         — reuses .github/workflows/publish-artifacts.yml (T-X.5) on
+#                        every push to develop/main, so the artifacts bucket always
+#                        carries a fresh layer + both handler zips for the branch's
+#                        environment.
+#   4. deploy-dabs     — the DABs deploy lane, behind the informed GitHub-environment
+#                        gate (dev/hml need no reviewer, production requires the
+#                        operator, T-X.2), workflow_dispatch only — mirrors the
+#                        legacy deploy_all_dm_applications.yml `deploy-dabs` job
+#                        structure exactly (env-scoped Databricks secrets, fail-closed
+#                        auth wiring), minus every Terraform/Lambda-infra part, which
+#                        belongs to dd-chain-infrastructure instead.
+#
+# No AWS_DEPLOY_ROLE_* of any kind is referenced anywhere below — the only AWS role
+# this repository ever assumes is …-gha-artifacts-publish, inside publish-artifacts.yml.
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "DABs deploy target (deploy-dabs job only)"
+        required: true
+        default: dev
+        type: choice
+        options: [dev, hml, prod]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DABS_DIR:   apps/dabs
+  LAMBDA_DIR: apps/lambda
+  UTILS_DIR:  utils
+
+jobs:
+
+  # ── 1. Quality gate ──────────────────────────────────────────────────────
+  quality:
+    name: Quality gate (ruff / mypy / pytest / pip-audit / actionlint / zizmor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dev tooling from the hash-locked apps/lambda/requirements-dev.txt
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r "${LAMBDA_DIR}/requirements-dev.txt"
+          pip install -e "${UTILS_DIR}[dev]"
+
+      - name: ruff format --check
+        run: ruff format --check . --no-cache
+
+      - name: ruff check
+        run: ruff check . --no-cache
+
+      - name: mypy
+        run: mypy
+
+      - name: pytest — tests/ (-p no:cacheprovider)
+        run: pytest tests -p no:cacheprovider -v
+
+      - name: pip-audit — apps/lambda/requirements.txt
+        run: pip-audit -r "${LAMBDA_DIR}/requirements.txt"
+
+      - name: actionlint (workflow lint, pinned version + checksum)
+        env:
+          ACTIONLINT_VERSION: "1.7.7"
+          ACTIONLINT_SHA256:  "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
+        run: |
+          set -euo pipefail
+          curl -fsSL -o actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
+          tar xzf actionlint.tar.gz actionlint
+          chmod +x actionlint
+          ./actionlint -color
+
+      - name: zizmor (workflow security lint, pinned version)
+        run: |
+          set -euo pipefail
+          pip install --quiet 'zizmor==1.29.0'
+          zizmor --persona regular --offline --min-severity high .github/workflows
+
+  # ── 2. databricks bundle validate — per bundle, per target ─────────────────
+  # F-07: env-scoped secrets only, fail-closed before the CLI call — same
+  # assert-then-run shape as deploy-dabs below, applied at validate time too.
+  bundle-validate-dev:
+    name: Bundle validate — dev
+    runs-on: ubuntu-latest
+    environment: dev
+    timeout-minutes: 15
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: databricks/setup-cli@6bb7075f85b326f8b9ce160933dfe9bcd63c8121  # v1.13.0
+      - name: databricks bundle validate --target dev, every bundle
+        env:
+          DATABRICKS_HOST:          ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID:     ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+        run: |
+          if [ -z "${DATABRICKS_HOST}" ] || [ -z "${DATABRICKS_CLIENT_ID}" ] || [ -z "${DATABRICKS_CLIENT_SECRET}" ]; then
+            echo "::error::DATABRICKS_HOST/DATABRICKS_CLIENT_ID/DATABRICKS_CLIENT_SECRET are not set as environment secrets on the dev environment."
+            exit 1
+          fi
+          make dabs_validate_all TARGET=dev
+
+  bundle-validate-hml:
+    name: Bundle validate — hml
+    runs-on: ubuntu-latest
+    environment: hml
+    timeout-minutes: 15
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: databricks/setup-cli@6bb7075f85b326f8b9ce160933dfe9bcd63c8121  # v1.13.0
+      - name: databricks bundle validate --target hml, every bundle
+        env:
+          DATABRICKS_HOST:          ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID:     ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+        run: |
+          if [ -z "${DATABRICKS_HOST}" ] || [ -z "${DATABRICKS_CLIENT_ID}" ] || [ -z "${DATABRICKS_CLIENT_SECRET}" ]; then
+            echo "::error::DATABRICKS_HOST/DATABRICKS_CLIENT_ID/DATABRICKS_CLIENT_SECRET are not set as environment secrets on the hml environment."
+            exit 1
+          fi
+          make dabs_validate_all TARGET=hml
+
+  bundle-validate-prod-guard:
+    name: Bundle validate — prod (must FAIL, host unset)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Deliberately NO `environment:` binding — production carries no Databricks
+    # secret (no prod workspace exists, ADR-002), so this job runs with none and
+    # asserts that `databricks bundle validate --target prod` fails as designed
+    # (T-C.3 host guard). A green exit here would mean the guard regressed.
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: databricks/setup-cli@6bb7075f85b326f8b9ce160933dfe9bcd63c8121  # v1.13.0
+      - name: Assert databricks bundle validate --target prod fails (no DATABRICKS_HOST)
+        run: |
+          set +e
+          make dabs_validate_all TARGET=prod
+          STATUS=$?
+          set -e
+          if [ "${STATUS}" -eq 0 ]; then
+            echo "::error::databricks bundle validate --target prod succeeded without DATABRICKS_HOST set — the prod host guard regressed (ADR-002)."
+            exit 1
+          fi
+          echo "prod validate correctly failed (exit ${STATUS}) with DATABRICKS_HOST unset — host guard intact."
+
+  # ── 3. Publish artifacts — reuses T-X.5's producer workflow ────────────────
+  publish:
+    name: Publish artifacts (${{ github.ref_name == 'main' && 'hml' || 'dev' }})
+    needs: quality
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+    uses: ./.github/workflows/publish-artifacts.yml
+    with:
+      target: ${{ github.ref_name == 'main' && 'hml' || 'dev' }}
+    secrets: inherit
+
+  # ── 4. DABs deploy — behind the informed environment gate ──────────────────
+  deploy-dabs:
+    name: DABs — Deploy bundles (${{ inputs.target }})
+    needs: quality
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target == 'prod' && 'production' || inputs.target }}
+    timeout-minutes: 45
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: databricks/setup-cli@6bb7075f85b326f8b9ce160933dfe9bcd63c8121  # v1.13.0
+      - name: Deploy all DABs components to ${{ inputs.target }}
+        env:
+          # Environment-scoped secrets ONLY — dev/hml carry these three (OAuth M2M
+          # service-principal); production carries none (no prod Databricks
+          # workspace exists yet), so target=prod fails closed at the non-empty
+          # assertion below instead of silently falling through to another
+          # environment's credential (mirrors legacy deploy_all_dm_applications.yml
+          # `deploy-dabs`, F-07).
+          DATABRICKS_HOST:          ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_CLIENT_ID:     ${{ secrets.DATABRICKS_CLIENT_ID }}
+          DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+          # env-indirection — never substitute inputs.target directly into a
+          # `run:` script body.
+          TARGET: ${{ inputs.target }}
+        run: |
+          if [ -z "${DATABRICKS_HOST}" ] || [ -z "${DATABRICKS_CLIENT_ID}" ] || [ -z "${DATABRICKS_CLIENT_SECRET}" ]; then
+            echo "::error::DATABRICKS_HOST/DATABRICKS_CLIENT_ID/DATABRICKS_CLIENT_SECRET are not set as environment secrets on this job's environment. dev/hml must carry all three (OAuth M2M service principal); production carries none by design (no prod Databricks workspace) and is expected to fail here."
+            exit 1
+          fi
+          bash "${{ env.DABS_DIR }}/deploy_all.sh" "${TARGET}"
