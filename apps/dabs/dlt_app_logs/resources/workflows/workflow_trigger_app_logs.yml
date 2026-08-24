@@ -1,0 +1,15 @@
+resources:
+  jobs:
+    workflow_trigger_app_logs:
+      name: "dm-trigger-app-logs"
+      description: "CI trigger — runs the dm-app-logs DLT pipeline once."
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: run_dlt_app_logs
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.pipeline_app_logs.id}
+            full_refresh: false
+      tags:
+        layer: streaming
+        project: dd-chain-explorer
+        trigger: ci

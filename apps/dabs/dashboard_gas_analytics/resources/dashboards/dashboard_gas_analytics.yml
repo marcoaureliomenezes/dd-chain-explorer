@@ -1,0 +1,11 @@
+resources:
+  dashboards:
+    gas_analytics:
+      display_name: "Gas Analytics"
+      # Generated from the sibling .lvdash.json.tmpl by
+      # ../../../render_dashboard_templates.sh --catalog {dev|hml|prd}
+      # (run before validate/deploy — dataset SQL is not bundle-templated).
+      file_path: ../../src/dashboards/03_gas_analytics.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      embed_credentials: false
+      parent_path: /Shared/dd-chain-explorer/dashboards

@@ -1,0 +1,8 @@
+# Lambda: contracts_ingestion
+# boto3 is provided natively by the Lambda runtime — do NOT include here.
+# dm-chain-utils is provided via the Lambda Layer, built by
+# scripts/build_lambda_layer.sh from a PATH requirement (pip install ./utils
+# --no-deps) — never a version pin against a public index (the package was
+# never published there; see apps/lambda/requirements.txt for its own
+# third-party dependencies).
+requests==2.34.2

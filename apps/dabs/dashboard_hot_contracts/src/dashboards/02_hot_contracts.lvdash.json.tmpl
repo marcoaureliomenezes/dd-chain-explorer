@@ -1,0 +1,241 @@
+{
+  "datasets": [
+    {
+      "name": "contracts_counters",
+      "displayName": "Contadores Contratos",
+      "query": "SELECT\n  COUNT(*)        AS contract_count,\n  SUM(tx_count)   AS total_tx_1h\nFROM {{CATALOG}}.g_apps.popular_contracts_ranking"
+    },
+    {
+      "name": "contracts_ranking",
+      "displayName": "Ranking — Top 20 Contratos",
+      "query": "SELECT\n  contract_address,\n  tx_count,\n  unique_senders,\n  first_seen,\n  last_seen,\n  computed_at\nFROM {{CATALOG}}.g_apps.popular_contracts_ranking\nORDER BY tx_count DESC\nLIMIT 20"
+    },
+    {
+      "name": "top10_bar",
+      "displayName": "Top 10 para Gráfico",
+      "query": "SELECT\n  SUBSTR(contract_address, 1, 10) || '...' AS contract_short,\n  contract_address,\n  tx_count,\n  unique_senders\nFROM {{CATALOG}}.g_apps.popular_contracts_ranking\nORDER BY tx_count DESC\nLIMIT 10"
+    }
+  ],
+  "pages": [
+    {
+      "name": "hot_contracts_page",
+      "displayName": "Hot Contracts",
+      "layout": [
+        {
+          "widget": {
+            "name": "counter_unique_contracts",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "contracts_counters",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "name": "sum(contract_count)",
+                      "expression": "SUM(`contract_count`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(contract_count)",
+                  "displayName": "Contratos Monitorados"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Contratos Monitorados"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_total_tx_1h",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "contracts_counters",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "name": "sum(total_tx_1h)",
+                      "expression": "SUM(`total_tx_1h`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(total_tx_1h)",
+                  "displayName": "Total Tx (Última 1h)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Total Tx (Última 1h)"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 0,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_top10_contracts",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "top10_bar",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "name": "contract_short",
+                      "expression": "`contract_short`"
+                    },
+                    {
+                      "name": "sum(tx_count)",
+                      "expression": "SUM(`tx_count`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "contract_short",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(tx_count)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Top 10 Contratos por Volume de Transações (Última 1h)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 3,
+            "width": 6,
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "table_contracts_ranking",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "contracts_ranking",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "name": "contract_address",
+                      "expression": "`contract_address`"
+                    },
+                    {
+                      "name": "tx_count",
+                      "expression": "`tx_count`"
+                    },
+                    {
+                      "name": "unique_senders",
+                      "expression": "`unique_senders`"
+                    },
+                    {
+                      "name": "first_seen",
+                      "expression": "`first_seen`"
+                    },
+                    {
+                      "name": "last_seen",
+                      "expression": "`last_seen`"
+                    },
+                    {
+                      "name": "computed_at",
+                      "expression": "`computed_at`"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "contract_address",
+                    "displayName": "Contrato"
+                  },
+                  {
+                    "fieldName": "tx_count",
+                    "displayName": "Tx Count"
+                  },
+                  {
+                    "fieldName": "unique_senders",
+                    "displayName": "Senders Únicos"
+                  },
+                  {
+                    "fieldName": "first_seen",
+                    "displayName": "Primeira Tx"
+                  },
+                  {
+                    "fieldName": "last_seen",
+                    "displayName": "Última Tx"
+                  },
+                  {
+                    "fieldName": "computed_at",
+                    "displayName": "Calculado em"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Ranking Completo — Top 20 Contratos (Última 1h)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 6,
+            "height": 9
+          }
+        }
+      ]
+    }
+  ]
+}

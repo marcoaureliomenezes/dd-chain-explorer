@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dm-chain-utils"
+version = "0.6.0"
+description = "Shared Python utilities for dd_chain_explorer Docker applications"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "dd-chain-explorer maintainers" }
+]
+license = { text = "MIT" }
+dependencies = [
+    "requests>=2.28.0",
+    "boto3>=1.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-mock>=3.10.0",
+    "faker>=18.0.0",
+]
+# Local-only, NOT installed by CI (T-R.2 F-01/F-14): pyspark is large and
+# JVM-backed with no other consumer in the Lambda/Terraform-focused quality
+# gate, so tests/dabs/test_export_gold_location.py's tier stays import-skipped
+# in CI by design — see tests/README.md.
+test-dlt = [
+    "pyspark>=3.5",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dm_chain_utils"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]

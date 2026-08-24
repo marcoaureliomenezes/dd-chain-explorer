@@ -1,0 +1,15 @@
+resources:
+  jobs:
+    workflow_trigger_ethereum:
+      name: "dm-trigger-ethereum"
+      description: "CI trigger — runs the dm-ethereum DLT pipeline once."
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: run_dlt_ethereum
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.pipeline_ethereum.id}
+            full_refresh: false
+      tags:
+        layer: streaming
+        project: dd-chain-explorer
+        trigger: ci

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "dm_export_gold"
+version = "0.1.0"
+requires-python = ">=3.10"
+description = "Export Gold API key consumption views to S3"
+
+[project.scripts]
+dm-export-gold-export-gold = "dm_export_gold.export_gold:main"
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["dm_export_gold*"]

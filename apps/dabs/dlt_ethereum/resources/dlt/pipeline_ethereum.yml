@@ -1,0 +1,36 @@
+resources:
+  pipelines:
+    pipeline_ethereum:
+      name: "dm-ethereum"
+      description: "DLT pipeline para processamento de dados Ethereum — Bronze + Silver + Gold."
+
+      catalog: ${var.catalog}
+      target: b_ethereum
+
+      libraries:
+        - notebook:
+            path: ../../src/streaming/ethereum_pipeline.py
+
+      serverless: true
+
+      configuration:
+        # S3 bucket for ingestion (raw data, DLT external tables, checkpoints)
+        ingestion.s3.bucket: ${var.ingestion_s3_bucket}
+        # Catalog name (para spark.table() referências a tabelas externas ao DLT)
+        catalog: ${var.catalog}
+        # S3 export path (para MVs que exportam dados para consumo externo)
+        s3.export.path: "s3://${var.ingestion_s3_bucket}/exports/popular_contracts"
+
+      continuous: ${var.dlt_continuous}
+      channel: CURRENT
+
+      # No `schedule:` here — the DLT pipeline resource does not support it on
+      # CLI 0.270 (unknown field, silently dropped by `bundle validate`).
+      # Scheduling lives on the in-bundle trigger job instead
+      # (resources/workflows/workflow_trigger_ethereum.yml, `schedule:` per
+      # target in databricks.yml).
+
+      tags:
+        project: dd-chain-explorer
+        layer: streaming
+        component: ethereum

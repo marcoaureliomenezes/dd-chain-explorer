@@ -1,0 +1,324 @@
+{
+  "datasets": [
+    {
+      "name": "etherscan_health",
+      "displayName": "Etherscan API Keys",
+      "query": "SELECT\n  api_key_name,\n  calls_total,\n  calls_ok_total,\n  calls_error_total,\n  calls_1h,\n  calls_24h,\n  last_call_at,\n  ROUND(100.0 * calls_error_total / NULLIF(calls_total, 0), 2) AS error_rate_pct\nFROM {{CATALOG}}.g_api_keys.etherscan_consumption\nUNION ALL\nSELECT\n  '(sem dados - pipeline app-logs nao executado)' AS api_key_name,\n  0 AS calls_total, 0 AS calls_ok_total, 0 AS calls_error_total,\n  0 AS calls_1h, 0 AS calls_24h, NULL AS last_call_at, NULL AS error_rate_pct\nWHERE NOT EXISTS (SELECT 1 FROM {{CATALOG}}.g_api_keys.etherscan_consumption)\nORDER BY calls_total DESC"
+    },
+    {
+      "name": "web3_health",
+      "displayName": "Web3 API Keys (Alchemy / Infura)",
+      "query": "SELECT\n  api_key_name,\n  vendor,\n  calls_total,\n  calls_ok_total,\n  calls_error_total,\n  calls_1h,\n  calls_24h,\n  last_call_at,\n  ROUND(100.0 * calls_error_total / NULLIF(calls_total, 0), 2) AS error_rate_pct\nFROM {{CATALOG}}.g_api_keys.web3_keys_consumption\nUNION ALL\nSELECT\n  '(sem dados - pipeline app-logs nao executado)' AS api_key_name,\n  'n/a' AS vendor,\n  0 AS calls_total, 0 AS calls_ok_total, 0 AS calls_error_total,\n  0 AS calls_1h, 0 AS calls_24h, NULL AS last_call_at, NULL AS error_rate_pct\nWHERE NOT EXISTS (SELECT 1 FROM {{CATALOG}}.g_api_keys.web3_keys_consumption)\nORDER BY calls_total DESC"
+    }
+  ],
+  "pages": [
+    {
+      "name": "api_health_page",
+      "displayName": "API Health",
+      "layout": [
+        {
+          "widget": {
+            "name": "table_etherscan_keys",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "etherscan_health",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "name": "api_key_name",
+                      "expression": "`api_key_name`"
+                    },
+                    {
+                      "name": "calls_1h",
+                      "expression": "`calls_1h`"
+                    },
+                    {
+                      "name": "calls_24h",
+                      "expression": "`calls_24h`"
+                    },
+                    {
+                      "name": "calls_ok_total",
+                      "expression": "`calls_ok_total`"
+                    },
+                    {
+                      "name": "calls_error_total",
+                      "expression": "`calls_error_total`"
+                    },
+                    {
+                      "name": "error_rate_pct",
+                      "expression": "`error_rate_pct`"
+                    },
+                    {
+                      "name": "last_call_at",
+                      "expression": "`last_call_at`"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "api_key_name",
+                    "displayName": "API Key"
+                  },
+                  {
+                    "fieldName": "calls_1h",
+                    "displayName": "Calls (1h)"
+                  },
+                  {
+                    "fieldName": "calls_24h",
+                    "displayName": "Calls (24h)"
+                  },
+                  {
+                    "fieldName": "calls_ok_total",
+                    "displayName": "OK Total"
+                  },
+                  {
+                    "fieldName": "calls_error_total",
+                    "displayName": "Erros Total"
+                  },
+                  {
+                    "fieldName": "error_rate_pct",
+                    "displayName": "Taxa Erro (%)"
+                  },
+                  {
+                    "fieldName": "last_call_at",
+                    "displayName": "Última Chamada"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Etherscan API Keys — Health"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_etherscan_calls_24h",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "etherscan_health",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "name": "api_key_name",
+                      "expression": "`api_key_name`"
+                    },
+                    {
+                      "name": "sum(calls_24h)",
+                      "expression": "SUM(`calls_24h`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "api_key_name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(calls_24h)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Chamadas 24h — Etherscan"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "table_web3_keys",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "web3_health",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "name": "api_key_name",
+                      "expression": "`api_key_name`"
+                    },
+                    {
+                      "name": "vendor",
+                      "expression": "`vendor`"
+                    },
+                    {
+                      "name": "calls_1h",
+                      "expression": "`calls_1h`"
+                    },
+                    {
+                      "name": "calls_24h",
+                      "expression": "`calls_24h`"
+                    },
+                    {
+                      "name": "calls_ok_total",
+                      "expression": "`calls_ok_total`"
+                    },
+                    {
+                      "name": "calls_error_total",
+                      "expression": "`calls_error_total`"
+                    },
+                    {
+                      "name": "error_rate_pct",
+                      "expression": "`error_rate_pct`"
+                    },
+                    {
+                      "name": "last_call_at",
+                      "expression": "`last_call_at`"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "api_key_name",
+                    "displayName": "API Key"
+                  },
+                  {
+                    "fieldName": "vendor",
+                    "displayName": "Vendor"
+                  },
+                  {
+                    "fieldName": "calls_1h",
+                    "displayName": "Calls (1h)"
+                  },
+                  {
+                    "fieldName": "calls_24h",
+                    "displayName": "Calls (24h)"
+                  },
+                  {
+                    "fieldName": "calls_ok_total",
+                    "displayName": "OK Total"
+                  },
+                  {
+                    "fieldName": "calls_error_total",
+                    "displayName": "Erros Total"
+                  },
+                  {
+                    "fieldName": "error_rate_pct",
+                    "displayName": "Taxa Erro (%)"
+                  },
+                  {
+                    "fieldName": "last_call_at",
+                    "displayName": "Última Chamada"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Web3 API Keys (Alchemy / Infura) — Health"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_web3_calls_24h",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "web3_health",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "name": "api_key_name",
+                      "expression": "`api_key_name`"
+                    },
+                    {
+                      "name": "sum(calls_24h)",
+                      "expression": "SUM(`calls_24h`)"
+                    },
+                    {
+                      "name": "vendor",
+                      "expression": "`vendor`"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "api_key_name",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(calls_24h)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "vendor",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Chamadas 24h — Web3 (por Vendor)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 18,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ]
+    }
+  ]
+}

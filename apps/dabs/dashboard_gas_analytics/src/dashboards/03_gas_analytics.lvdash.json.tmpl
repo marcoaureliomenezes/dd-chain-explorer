@@ -1,0 +1,389 @@
+{
+  "datasets": [
+    {
+      "name": "gas_by_type",
+      "displayName": "Gas por Tipo de Transação",
+      "query": "SELECT\n  tx_type_semantic,\n  COUNT(*)                                                AS tx_count,\n  ROUND(AVG(gas_pct_of_block), 4)                        AS avg_gas_pct,\n  ROUND(AVG(CAST(gas_price AS DOUBLE) / 1e9), 4)        AS avg_gas_price_gwei,\n  ROUND(AVG(CAST(gas_limit AS DOUBLE)), 0)              AS avg_gas_limit\nFROM {{CATALOG}}.g_apps.ethereum_gas_consume\nWHERE tx_type_semantic IS NOT NULL\nGROUP BY tx_type_semantic\nORDER BY tx_count DESC"
+    },
+    {
+      "name": "gas_hourly",
+      "displayName": "Gas Price por Bloco e Tipo",
+      "query": "SELECT\n  block_number,\n  tx_type_semantic,\n  ROUND(AVG(CAST(gas_price AS DOUBLE) / 1e9), 4)       AS avg_gas_price_gwei,\n  ROUND(AVG(gas_pct_of_block), 4)                       AS avg_gas_pct,\n  COUNT(*)                                               AS tx_count\nFROM {{CATALOG}}.g_apps.ethereum_gas_consume\nWHERE tx_type_semantic IS NOT NULL\nGROUP BY block_number, tx_type_semantic\nORDER BY block_number DESC\nLIMIT 2000"
+    },
+    {
+      "name": "gas_price_daily",
+      "displayName": "Percentis de Gas Price por Hora",
+      "query": "SELECT\n  hour_bucket,\n  ROUND(AVG(gas_price_p50_gwei), 4) AS gas_price_p50_gwei,\n  ROUND(AVG(gas_price_p75_gwei), 4) AS gas_price_p75_gwei,\n  ROUND(AVG(gas_price_p95_gwei), 4) AS gas_price_p95_gwei,\n  SUM(tx_count)                    AS tx_count\nFROM {{CATALOG}}.g_apps.gas_price_distribution_hourly\nGROUP BY hour_bucket\nORDER BY hour_bucket ASC\nLIMIT 720"
+    }
+  ],
+  "pages": [
+    {
+      "name": "gas_analytics_page",
+      "displayName": "Gas Analytics",
+      "layout": [
+        {
+          "widget": {
+            "name": "pie_tx_by_type",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "gas_by_type",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "name": "tx_type_semantic",
+                      "expression": "`tx_type_semantic`"
+                    },
+                    {
+                      "name": "sum(tx_count)",
+                      "expression": "SUM(`tx_count`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "tx_type_semantic",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(tx_count)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Distribuição de Txs por Tipo"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_gas_pct_by_type",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "gas_by_type",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "name": "tx_type_semantic",
+                      "expression": "`tx_type_semantic`"
+                    },
+                    {
+                      "name": "sum(avg_gas_pct)",
+                      "expression": "SUM(`avg_gas_pct`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "tx_type_semantic",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(avg_gas_pct)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Avg Gas % do Bloco por Tipo"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 0,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "line_gas_price_by_block",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "gas_hourly",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "name": "block_number",
+                      "expression": "`block_number`"
+                    },
+                    {
+                      "name": "sum(avg_gas_price_gwei)",
+                      "expression": "SUM(`avg_gas_price_gwei`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "block_number",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Bloco"
+                },
+                "y": {
+                  "fieldName": "sum(avg_gas_price_gwei)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Avg Gas Price (Gwei)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Avg Gas Price (Gwei) por Bloco — por Tipo de Transação"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "table_gas_summary",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "gas_by_type",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "name": "tx_type_semantic",
+                      "expression": "`tx_type_semantic`"
+                    },
+                    {
+                      "name": "tx_count",
+                      "expression": "`tx_count`"
+                    },
+                    {
+                      "name": "avg_gas_pct",
+                      "expression": "`avg_gas_pct`"
+                    },
+                    {
+                      "name": "avg_gas_price_gwei",
+                      "expression": "`avg_gas_price_gwei`"
+                    },
+                    {
+                      "name": "avg_gas_limit",
+                      "expression": "`avg_gas_limit`"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "tx_type_semantic",
+                    "displayName": "Tipo"
+                  },
+                  {
+                    "fieldName": "tx_count",
+                    "displayName": "Total Txs"
+                  },
+                  {
+                    "fieldName": "avg_gas_pct",
+                    "displayName": "Avg Gas % Bloco"
+                  },
+                  {
+                    "fieldName": "avg_gas_price_gwei",
+                    "displayName": "Avg Gas Price (Gwei)"
+                  },
+                  {
+                    "fieldName": "avg_gas_limit",
+                    "displayName": "Avg Gas Limit"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Resumo por Tipo de Transação"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 13,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "line_gas_price_percentiles",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "gas_price_daily",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "name": "hourly(hour_bucket)",
+                      "expression": "DATE_TRUNC(\"HOUR\", `hour_bucket`)"
+                    },
+                    {
+                      "name": "sum(gas_price_p50_gwei)",
+                      "expression": "SUM(`gas_price_p50_gwei`)"
+                    },
+                    {
+                      "name": "sum(gas_price_p75_gwei)",
+                      "expression": "SUM(`gas_price_p75_gwei`)"
+                    },
+                    {
+                      "name": "sum(gas_price_p95_gwei)",
+                      "expression": "SUM(`gas_price_p95_gwei`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "hourly(hour_bucket)",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Hora"
+                },
+                "y": [
+                  {
+                    "fieldName": "sum(gas_price_p50_gwei)",
+                    "scale": {
+                      "type": "quantitative"
+                    },
+                    "displayName": "P50 (Gwei)"
+                  },
+                  {
+                    "fieldName": "sum(gas_price_p75_gwei)",
+                    "scale": {
+                      "type": "quantitative"
+                    },
+                    "displayName": "P75 (Gwei)"
+                  },
+                  {
+                    "fieldName": "sum(gas_price_p95_gwei)",
+                    "scale": {
+                      "type": "quantitative"
+                    },
+                    "displayName": "P95 (Gwei)"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Volatilidade de Gas Price — P50 / P75 / P95 por Hora (Gwei)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 19,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_hourly_tx_volume",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "gas_price_daily",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "name": "hourly(hour_bucket)",
+                      "expression": "DATE_TRUNC(\"HOUR\", `hour_bucket`)"
+                    },
+                    {
+                      "name": "sum(tx_count)",
+                      "expression": "SUM(`tx_count`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "hourly(hour_bucket)",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(tx_count)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Volume Horário de Transações"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 26,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+# Lambda: gold_to_dynamodb
+# boto3 is provided natively by the Lambda runtime — do NOT include here.
+# This handler imports only the standard library + boto3 — it does not import
+# dm_chain_utils at all, even though the layer is attached (see
+# apps/lambda/README.md). No pip dependency of its own.

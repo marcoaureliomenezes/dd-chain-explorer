@@ -1,0 +1,25 @@
+# Dev/test/lint dependencies for dd-chain-explorer CI — the ONE source for every
+# tool the `quality` job in .github/workflows/plan_on_pr.yml installs (T-R.2 review
+# remediation, F-01). Hash-locked and installed with --require-hashes so ruff, mypy,
+# pip-audit, pytest and the test-time AWS mocking library share a single, reviewable
+# provenance instead of being pinned inline in workflow YAML.
+#
+# moto powers tests/lambda/test_*_handler.py and tests/utils/test_dm_dynamodb.py /
+# test_dm_parameter_store.py — s3 + dynamodb + ssm are the only AWS services those
+# tests mock.
+#
+# pyspark is deliberately NOT declared here (AC-23's DABs job-script tier stays
+# import-skipped in CI, see tests/dabs/test_export_gold_location.py and
+# tests/README.md) — it is declared as the optional `test-dlt` extra in
+# utils/pyproject.toml for a developer who wants to run that tier locally.
+#
+# Compile with:
+#   pip-compile --allow-unsafe --generate-hashes \
+#     --output-file=requirements-dev.txt requirements-dev.in
+-c requirements.txt
+
+ruff==0.16.4
+mypy==2.3.1
+pip-audit==2.10.1
+pytest==9.1.1
+moto[s3,dynamodb,ssm]==5.1.0

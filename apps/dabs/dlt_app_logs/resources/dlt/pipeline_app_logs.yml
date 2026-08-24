@@ -1,0 +1,36 @@
+resources:
+  pipelines:
+    pipeline_app_logs:
+      name: "dm-app-logs"
+      description: "DLT pipeline para ingestão de logs de aplicações — Bronze + Silver + Gold."
+
+      catalog: ${var.catalog}
+      target: b_app_logs
+
+      libraries:
+        - notebook:
+            path: ../../src/streaming/app_logs_pipeline.py
+
+      serverless: true
+
+      configuration:
+        # S3 bucket for ingestion (raw data, DLT external tables, checkpoints)
+        ingestion.s3.bucket: ${var.ingestion_s3_bucket}
+        # logger-name allow-lists for the silver split (T-C.4) — see the
+        # variable descriptions in databricks.yml.
+        streaming_logger_names: ${var.streaming_logger_names}
+        batch_logger_names: ${var.batch_logger_names}
+
+      continuous: ${var.dlt_continuous}
+      channel: CURRENT
+
+      # No `schedule:` here — the DLT pipeline resource does not support it on
+      # CLI 0.270 (unknown field, silently dropped by `bundle validate`).
+      # Scheduling lives on the in-bundle trigger job instead
+      # (resources/workflows/workflow_trigger_app_logs.yml, `schedule:` per
+      # target in databricks.yml).
+
+      tags:
+        project: dd-chain-explorer
+        layer: streaming
+        component: app_logs

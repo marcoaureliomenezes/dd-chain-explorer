@@ -1,0 +1,9 @@
+# Third-party dependencies for the dm-chain-utils Lambda layer.
+#
+# The shared library itself (dm_chain_utils) is installed separately as a PATH
+# requirement with --no-deps — see scripts/build_lambda_layer.sh. Only its kept
+# modules' own third-party imports belong here (boto3/botocore are provided
+# natively by the Lambda runtime and are deliberately excluded).
+#
+# Compile with: pip-compile --generate-hashes --output-file=requirements.txt requirements.in
+requests==2.34.2

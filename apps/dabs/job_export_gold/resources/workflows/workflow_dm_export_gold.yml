@@ -1,0 +1,35 @@
+resources:
+  jobs:
+    workflow_dm_export_gold:
+      name: "dm-dm-export-gold"
+      description: "Export Gold API key consumption views to S3"
+      max_concurrent_runs: 1
+
+      
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "2"
+            dependencies:
+              - "${workspace.file_path}/src/batch/dm_export_gold/dist/dm_export_gold-0.1.0-py3-none-any.whl"
+
+      tasks:
+        - task_key: export_gold
+          environment_key: default
+          python_wheel_task:
+            package_name: dm_export_gold
+            entry_point: dm-export-gold-export-gold
+            parameters:
+              - "--catalog"
+              - ${var.catalog}
+              - "--export-s3-path"
+              - "s3://${var.ingestion_s3_bucket}/exports"
+              - "--storage-mode"
+              - "managed"
+              
+
+      tags:
+        project: dd-chain-explorer
+        layer: batch
+        component: dm_export_gold

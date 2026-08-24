@@ -1,0 +1,53 @@
+bundle:
+  name: dashboard-network-overview
+
+include:
+  - resources/dashboards/dashboard_network_overview.yml
+
+variables:
+  warehouse_id:
+    description: "Databricks SQL warehouse ID"
+    lookup:
+      warehouse: "Serverless Starter Warehouse"
+
+targets:
+  dev:
+    # T-R.2 F-09 (AC-19): every target runs as the service principal, never
+    # a personal identity — dev/hml previously deployed as whoever held the
+    # PAT, the exact coupling C3 set out to remove.
+    run_as:
+      service_principal_name: "02d610ae-7682-4f91-9053-4f7ed6880d96"
+    presets:
+      name_prefix: "[dev] "
+    workspace:
+      # host: resolved from the DATABRICKS_HOST env var at validate/deploy
+      # time (CLI 0.270 does not support variable interpolation on this
+      # authentication field). Set it to the Free-Edition workspace URL.
+      root_path: "~/.bundle/${bundle.name}/dev"
+
+  hml:
+    # T-R.2 F-09 (AC-19): every target runs as the service principal, never
+    # a personal identity — dev/hml previously deployed as whoever held the
+    # PAT, the exact coupling C3 set out to remove.
+    run_as:
+      service_principal_name: "02d610ae-7682-4f91-9053-4f7ed6880d96"
+    presets:
+      name_prefix: "[hml] "
+    workspace:
+      # host: resolved from the DATABRICKS_HOST env var at validate/deploy
+      # time (CLI 0.270 does not support variable interpolation on this
+      # authentication field). Set it to the Free-Edition workspace URL.
+      root_path: "~/.bundle/${bundle.name}/hml"
+
+  prod:
+    mode: production
+    # prod runs as the dm_spn_user service principal (never a personal
+    # identity) — dev/hml deploy interactively as the operator.
+    run_as:
+      service_principal_name: "02d610ae-7682-4f91-9053-4f7ed6880d96"
+    workspace:
+      # host: intentionally unset. Resolved from DATABRICKS_HOST at
+      # runtime; no value is provided anywhere in this bundle because no
+      # prod Databricks workspace exists yet (ADR-002) — `validate -t
+      # prod` must fail without an explicit DATABRICKS_HOST export.
+      root_path: "/Workspace/.bundle/${bundle.name}/prod"
