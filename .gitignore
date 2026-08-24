@@ -1,0 +1,51 @@
+.hypothesis/
+.idea
+.ipynb_checkpoints
+__pycache__
+
+# Python build artifacts (generic — covers all subdirectories)
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+
+**/*.pyo
+**.log
+/logs
+venv*
+
+# Terraform — this repo declares no Terraform of its own (that lives in
+# dd-chain-infrastructure); kept as defence-in-depth in case a local dry-run
+# ever touches services-shaped tooling.
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.backup
+
+# Credenciais nunca devem ser versionadas
+*.pem
+*.key
+*.p12
+*_credentials.json
+**/.env
+**/*.env
+
+# Databricks CLI bundle cache / local state
+.databricks/
+dabs/.databricks/
+
+# T-D.4/T-D.5-era reproducible build outputs, tool caches. Never committed:
+# CI rebuilds the layer from source and uploads it to the artifacts bucket;
+# Terraform (dd-chain-infrastructure) reads it back by s3_key/sha256, not
+# from a working-tree path.
+.lambda_zip/
+apps/**/*.zip
+*.tfplan
+tfplan
+
+# dadaia-workspace runtime state — must never be inside a repo (workspace-root only)
+.dadaia/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

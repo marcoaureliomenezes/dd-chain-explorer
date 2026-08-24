@@ -1,0 +1,69 @@
+# Root tooling configuration for dd-chain-explorer (three-repo segregation, v0.6.0).
+#
+# This is a tooling-config-only pyproject.toml (no [project] table, no build
+# backend) — it configures pytest, ruff and mypy for the whole repo tree. Each
+# deployable unit (utils/, apps/dabs/job_*/src/**) keeps its own packaging
+# pyproject.toml unchanged.
+#
+# Scope note (v0.6.0 three-repo segregation, T-X.1): this repository's own
+# surface is apps/dabs, apps/lambda, utils, tests — no Terraform, no
+# scripts/ci/ (that suite lives in dd-chain-infrastructure). testpaths is
+# therefore scoped to this tree's tests/ only.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+python_classes = ["Test*"]
+pythonpath = ["."]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+# specs/_archive/** is FROZEN (git-mv-only, never edited in place — DADAIA.md §3);
+# specs/audits/** and .dadaia/ are workspace-governance trees this repo's tooling
+# does not own. Excluding them keeps `ruff format --check .` from tripping on
+# fenced code blocks inside historical markdown that this repo never formats.
+# specs/** itself does not exist in this tree yet (it arrives at C-DAY, T-V.4) —
+# the exclude is declared ahead of time so this file needs no further edit then.
+extend-exclude = ["specs/_archive", "specs/audits", ".dadaia"]
+# DLT notebooks (apps/dabs/**) reference `spark`/`dlt`/`dbutils`/`display` as
+# Databricks-injected implicit globals — never imported, always present at
+# runtime. Declaring them as ruff builtins lets those files pass F821 via
+# config.
+builtins = ["spark", "dlt", "dbutils", "display"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+    "E501",  # line-length is enforced by `ruff format`, not `ruff check`, repo-wide
+]
+
+[tool.ruff.lint.per-file-ignores]
+# DLT source is Databricks-notebook-shaped (magic `# COMMAND ----------` cell
+# markers, %md cells) — top-of-file imports interleaved with cell markers trip
+# E402 by construction, not by mistake.
+"apps/dabs/**" = ["E402"]
+
+[tool.mypy]
+python_version = "3.12"
+incremental = false
+cache_dir = "/dev/null"
+mypy_path = "utils/src"
+strict = true
+warn_unused_configs = true
+explicit_package_bases = true
+namespace_packages = true
+
+# Scope: the kept, live dm_chain_utils modules + both Lambda handlers.
+files = [
+    "utils/src/dm_chain_utils/dm_dynamodb.py",
+    "utils/src/dm_chain_utils/dm_etherscan.py",
+    "utils/src/dm_chain_utils/dm_parameter_store.py",
+    "apps/lambda",
+]
+
+[[tool.mypy.overrides]]
+module = ["boto3.*", "botocore.*", "requests.*"]
+ignore_missing_imports = true
