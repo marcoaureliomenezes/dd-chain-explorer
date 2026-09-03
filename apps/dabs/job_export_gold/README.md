@@ -6,7 +6,7 @@ Autonomous Databricks Asset Bundle component for exporting Gold layer data to S3
 
 ```
 job_export_gold/
-├── databricks.yml                    # Bundle config with dev/hml/prod targets
+├── databricks.yml                    # Bundle config with dev/prod targets
 ├── resources/workflows/
 │   └── workflow_dm_export_gold.yml   # Single task: export_gold
 └── src/batch/dm_export_gold/         # Python wheel with export logic
@@ -26,7 +26,6 @@ databricks bundle validate --target dev
 
 # Deploy to target
 databricks bundle deploy --target dev    # DEV
-databricks bundle deploy --target hml    # HML (staging)
 databricks bundle deploy --target prod   # PROD
 
 # Run job manually
@@ -56,7 +55,7 @@ dm-export-gold-export-gold = "dm_export_gold.export_gold:main"
 ```
 
 Parameters passed to the task:
-- `--catalog`: target Unity Catalog (dev/hml/dd_chain_explorer)
+- `--catalog`: target Unity Catalog (dev/prd)
 - `--storage-mode`: `managed`
 
 ## References

@@ -43,7 +43,7 @@ non-DLT-owned object left to scope down to).
 
 ## Targets
 
-Every bundle declares the same three targets. **The workspace host is never a
+Every bundle declares the same two targets. **The workspace host is never a
 literal in any `databricks.yml`** — it is resolved from the `DATABRICKS_HOST`
 environment variable at validate/deploy time (Databricks CLI 0.270 does not
 support `${var.x}` interpolation on `workspace.host`, an authentication field —
@@ -51,16 +51,17 @@ the CLI's own validate warning says so). Export it before running any bundle
 command:
 
 ```bash
-export DATABRICKS_HOST="<the Free-Edition workspace URL>"
+export DATABRICKS_HOST="<the workspace URL of the target>"
 export DATABRICKS_CONFIG_PROFILE=DEFAULT   # or DATABRICKS_TOKEN — credentials still
                                             # resolve independently of DATABRICKS_HOST
 ```
 
-| Target | Catalog | `run_as` | Notes |
-|---|---|---|---|
-| `dev` | `dev` | interactive user (unset — deploys as whoever authenticates) | `[dev] ` name prefix |
-| `hml` | `hml` | interactive user (unset) | `[hml] ` name prefix; buckets pinned to `dm-chain-explorer-hml-raw-data` / `dm-chain-explorer-hml-lakehouse` |
-| `prod` | `prd` | the `dm_spn_user` service principal | No PRD Databricks workspace exists yet (ADR-002) — `DATABRICKS_HOST` is never set for `prod` in this release, so `bundle validate -t prod` fails closed |
+| Target | Workspace | Catalog | `run_as` | Notes |
+|---|---|---|---|---|
+| `dev` | Free Edition | `dev` | `dm_spn_user` (the Free-Edition service principal) | `[dev] ` name prefix; deployable interactively or from CI (`dev` GitHub environment) |
+| `prod` | official account | `prd` | the deploying identity — CI's production service principal (`mode: production`) | Deployed **only** from CI, behind the `production` GitHub environment (operator approval); never interactively |
+
+There is no `hml` target: the platform has two workspaces, not three.
 
 ---
 
@@ -68,14 +69,14 @@ export DATABRICKS_CONFIG_PROFILE=DEFAULT   # or DATABRICKS_TOKEN — credentials
 
 ```bash
 for b in apps/dabs/*/; do
-  (cd "$b" && databricks bundle validate -t dev && databricks bundle validate -t hml)
+  (cd "$b" && databricks bundle validate -t dev)
 done
 ```
 
-`validate -t prod` must fail (non-zero) whenever `DATABRICKS_HOST` is unset — that
-is the guard, not a bug.
+`validate -t prod` needs the production `DATABRICKS_HOST`; CI runs it bound to the
+`production` environment on `main`, never on a PR.
 
-## Deploy (dev / hml only — no prod target exists)
+## Deploy
 
 ```bash
 for b in apps/dabs/*/; do
@@ -83,7 +84,9 @@ for b in apps/dabs/*/; do
 done
 ```
 
-Dashboard bundles need one extra step first — see below.
+`prod` deploys only through `ci.yml`'s `deploy-dabs` job (`workflow_dispatch`,
+target `prod`, `production` environment gate). Dashboard bundles need one extra
+step first — see below.
 
 ## Dashboards — catalog templating
 
@@ -94,7 +97,7 @@ placeholder, and `render_dashboard_templates.sh` materialises the real
 `.lvdash.json` (gitignored, generated) that the bundle's `file_path:` references:
 
 ```bash
-./apps/dabs/render_dashboard_templates.sh --catalog dev   # or hml
+./apps/dabs/render_dashboard_templates.sh --target dev   # or prod (-> catalog prd)
 ```
 
 Run this before `validate`/`deploy` on any dashboard bundle. `embed_credentials`

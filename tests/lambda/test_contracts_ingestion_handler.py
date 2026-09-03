@@ -99,7 +99,7 @@ class TestNormalizeTx:
 
 
 class TestDryRunValidation:
-    """``_dry_run_validation`` is the HML CI/CD gate's connectivity probe."""
+    """``_dry_run_validation`` is the CI dry-run gate's connectivity probe."""
 
     def test_returns_ok_with_keys_and_contracts(self, handler_module, aws):
         aws["ssm"].put_parameter(

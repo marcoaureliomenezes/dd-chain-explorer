@@ -6,16 +6,17 @@ name: CI
 #
 #   1. quality        — ruff format --check, ruff check, mypy, pytest, pip-audit,
 #                        actionlint + zizmor on this repo's own two workflows.
-#   2. bundle-validate — `databricks bundle validate` per bundle per target: dev and
-#                        hml must succeed; prod must FAIL (its workspace.host is
-#                        deliberately unset, ADR-002 — no prod Databricks workspace
-#                        exists yet) — validate only, never a deploy, in CI.
+#   2. bundle-validate — `databricks bundle validate` per bundle per target: dev on
+#                        every PR/push (Free-Edition workspace, `dev` environment);
+#                        prod on pushes to main only (official-account workspace,
+#                        `production` environment — operator-approved). Validate
+#                        only, never a deploy, in CI.
 #   3. publish         — reuses .github/workflows/publish-artifacts.yml (T-X.5) on
-#                        every push to develop/main, so the artifacts bucket always
-#                        carries a fresh layer + both handler zips for the branch's
-#                        environment.
+#                        every push to develop (-> `dev`) and main (-> `production`),
+#                        so the artifacts bucket always carries a fresh layer + both
+#                        handler zips for the branch's environment.
 #   4. deploy-dabs     — the DABs deploy lane, behind the informed GitHub-environment
-#                        gate (dev/hml need no reviewer, production requires the
+#                        gate (dev needs no reviewer, production requires the
 #                        operator, T-X.2), workflow_dispatch only — mirrors the
 #                        legacy deploy_all_dm_applications.yml `deploy-dabs` job
 #                        structure exactly (env-scoped Databricks secrets, fail-closed
@@ -37,7 +38,7 @@ on:
         required: true
         default: dev
         type: choice
-        options: [dev, hml, prod]
+        options: [dev, prod]
 
 permissions:
   contents: read
@@ -144,10 +145,15 @@ jobs:
           fi
           make dabs_validate_all TARGET=dev
 
-  bundle-validate-hml:
-    name: Bundle validate — hml
+  bundle-validate-prod:
+    name: Bundle validate — prod
     runs-on: ubuntu-latest
-    environment: hml
+    # Bound to `production` (operator-approved, deployment-branch policy = main),
+    # so it runs on pushes to main only — never on a PR, which would park every
+    # PR on an approval. The prod workspace is the official account; its host
+    # and service-principal credentials are `production` environment secrets.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
     timeout-minutes: 15
     steps:
       - name: Harden Runner
@@ -158,55 +164,26 @@ jobs:
         with:
           persist-credentials: false
       - uses: databricks/setup-cli@6bb7075f85b326f8b9ce160933dfe9bcd63c8121  # v1.13.0
-      - name: databricks bundle validate --target hml, every bundle
+      - name: databricks bundle validate --target prod, every bundle
         env:
           DATABRICKS_HOST:          ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_CLIENT_ID:     ${{ secrets.DATABRICKS_CLIENT_ID }}
           DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
         run: |
           if [ -z "${DATABRICKS_HOST}" ] || [ -z "${DATABRICKS_CLIENT_ID}" ] || [ -z "${DATABRICKS_CLIENT_SECRET}" ]; then
-            echo "::error::DATABRICKS_HOST/DATABRICKS_CLIENT_ID/DATABRICKS_CLIENT_SECRET are not set as environment secrets on the hml environment."
+            echo "::error::DATABRICKS_HOST/DATABRICKS_CLIENT_ID/DATABRICKS_CLIENT_SECRET are not set as environment secrets on the production environment."
             exit 1
           fi
-          make dabs_validate_all TARGET=hml
-
-  bundle-validate-prod-guard:
-    name: Bundle validate — prod (must FAIL, host unset)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    # Deliberately NO `environment:` binding — production carries no Databricks
-    # secret (no prod workspace exists, ADR-002), so this job runs with none and
-    # asserts that `databricks bundle validate --target prod` fails as designed
-    # (T-C.3 host guard). A green exit here would mean the guard regressed.
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c  # v2.21.0
-        with:
-          egress-policy: audit
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: databricks/setup-cli@6bb7075f85b326f8b9ce160933dfe9bcd63c8121  # v1.13.0
-      - name: Assert databricks bundle validate --target prod fails (no DATABRICKS_HOST)
-        run: |
-          set +e
           make dabs_validate_all TARGET=prod
-          STATUS=$?
-          set -e
-          if [ "${STATUS}" -eq 0 ]; then
-            echo "::error::databricks bundle validate --target prod succeeded without DATABRICKS_HOST set — the prod host guard regressed (ADR-002)."
-            exit 1
-          fi
-          echo "prod validate correctly failed (exit ${STATUS}) with DATABRICKS_HOST unset — host guard intact."
 
   # ── 3. Publish artifacts — reuses T-X.5's producer workflow ────────────────
   publish:
-    name: Publish artifacts (${{ github.ref_name == 'main' && 'hml' || 'dev' }})
+    name: Publish artifacts (${{ github.ref_name == 'main' && 'production' || 'dev' }})
     needs: quality
     if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
     uses: ./.github/workflows/publish-artifacts.yml
     with:
-      target: ${{ github.ref_name == 'main' && 'hml' || 'dev' }}
+      target: ${{ github.ref_name == 'main' && 'production' || 'dev' }}
     secrets: inherit
 
   # ── 4. DABs deploy — behind the informed environment gate ──────────────────
@@ -228,12 +205,11 @@ jobs:
       - uses: databricks/setup-cli@6bb7075f85b326f8b9ce160933dfe9bcd63c8121  # v1.13.0
       - name: Deploy all DABs components to ${{ inputs.target }}
         env:
-          # Environment-scoped secrets ONLY — dev/hml carry these three (OAuth M2M
-          # service-principal); production carries none (no prod Databricks
-          # workspace exists yet), so target=prod fails closed at the non-empty
-          # assertion below instead of silently falling through to another
-          # environment's credential (mirrors legacy deploy_all_dm_applications.yml
-          # `deploy-dabs`, F-07).
+          # Environment-scoped secrets ONLY — `dev` (Free-Edition workspace) and
+          # `production` (official-account workspace) each carry these three for
+          # their own OAuth M2M service principal; a missing one fails closed at
+          # the non-empty assertion below instead of silently falling through to
+          # another environment's credential (F-07).
           DATABRICKS_HOST:          ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_CLIENT_ID:     ${{ secrets.DATABRICKS_CLIENT_ID }}
           DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
@@ -242,7 +218,7 @@ jobs:
           TARGET: ${{ inputs.target }}
         run: |
           if [ -z "${DATABRICKS_HOST}" ] || [ -z "${DATABRICKS_CLIENT_ID}" ] || [ -z "${DATABRICKS_CLIENT_SECRET}" ]; then
-            echo "::error::DATABRICKS_HOST/DATABRICKS_CLIENT_ID/DATABRICKS_CLIENT_SECRET are not set as environment secrets on this job's environment. dev/hml must carry all three (OAuth M2M service principal); production carries none by design (no prod Databricks workspace) and is expected to fail here."
+            echo "::error::DATABRICKS_HOST/DATABRICKS_CLIENT_ID/DATABRICKS_CLIENT_SECRET are not set as environment secrets on this job's environment (dev and production must each carry all three — OAuth M2M service principal)."
             exit 1
           fi
           bash "${{ env.DABS_DIR }}/deploy_all.sh" "${TARGET}"

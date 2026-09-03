@@ -32,5 +32,5 @@ targets:
 
 | Environment | Compute | Table type |
 |-------------|---------|------------|
-| DEV / HML   | Serverless | MANAGED (Unity Catalog) |
+| DEV         | Serverless | MANAGED (Unity Catalog) |
 | PROD        | Cluster | EXTERNAL (`LOCATION s3://...`) via DDL setup |

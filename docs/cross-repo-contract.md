@@ -95,9 +95,9 @@ bucket, and the publisher can never touch Terraform state or apply infrastructur
 
 ---
 
-## 4. The five-role OIDC map
+## 4. The four-role OIDC map
 
-All five roles are created and trust-repointed by `dd-chain-infrastructure`'s
+All four roles are created and trust-repointed by `dd-chain-infrastructure`'s
 `services/prd/00_bootstrap` stack — the one stack no CI role may ever apply (applied by
 the operator only). Each carries this project's permissions boundary; none has a
 managed-policy attachment or an `iam:*`/`sts:*` wildcard allowance.
@@ -105,12 +105,11 @@ managed-policy attachment or an `iam:*`/`sts:*` wildcard allowance.
 | Role | Trusted repository | Trust condition | May do |
 |---|---|---|---|
 | `dm-chain-explorer-gha-deploy-dev` | `dd-chain-infrastructure` | `repo:<owner>/dd-chain-infrastructure:environment:dev` | Plan + apply the `dev` stacks |
-| `dm-chain-explorer-gha-deploy-hml` | `dd-chain-infrastructure` | `repo:<owner>/dd-chain-infrastructure:environment:hml` | Plan + apply the `hml` stacks |
 | `dm-chain-explorer-gha-deploy-prd` | `dd-chain-infrastructure` | `repo:<owner>/dd-chain-infrastructure:environment:production` | Plan + apply the `prd` stacks (excluding `prd/00_bootstrap` itself) |
 | `dm-chain-explorer-gha-readonly-plan` | `dd-chain-infrastructure` | `pull_request` + `refs/heads/{develop,main}` | Read-only plan only (`-lock=false`); never applies |
-| `dm-chain-explorer-gha-artifacts-publish` | `dd-chain-explorer` (this repo) | `repo:<owner>/dd-chain-explorer:…` | **Only** `s3:PutObject`, `s3:PutObjectTagging`, `s3:AbortMultipartUpload` on `dm-chain-explorer-artifacts/*` and `s3:ListBucket` on the bucket — no Terraform state access, no Lambda/IAM permission of any kind |
+| `dm-chain-explorer-gha-artifacts-publish` | `dd-chain-explorer` (this repo) | `repo:<owner>/dd-chain-explorer:environment:{dev,production}` | **Only** `s3:PutObject`, `s3:PutObjectTagging`, `s3:AbortMultipartUpload` on `dm-chain-explorer-artifacts/*` and `s3:ListBucket` on the bucket — no Terraform state access, no Lambda/IAM permission of any kind |
 
-The four deploy/readonly roles trust `dd-chain-infrastructure`; the publish role trusts
+The three deploy/readonly roles trust `dd-chain-infrastructure`; the publish role trusts
 this repository. Neither side can assume the other's role — the artifact seam (§2, §3)
 is the only channel between them, mediated by S3 object contents, never by shared
 credentials.
@@ -118,6 +117,17 @@ credentials.
 ---
 
 ## 5. The Databricks split
+
+The platform has exactly two environments, each one Databricks workspace and one
+GitHub environment in both repositories:
+
+| Environment | Databricks workspace | AWS stacks | GitHub environment | Credentials |
+|---|---|---|---|---|
+| `dev` | Free Edition (`dm_spn_user` service principal) | `services/dev/*` | `dev` — no reviewer | `DATABRICKS_HOST/CLIENT_ID/CLIENT_SECRET` env secrets in `dd-chain-explorer` |
+| `prod` | the official account (its own service principal) | `services/prd/*` | `production` — operator approval, `main` only | `DATABRICKS_HOST/CLIENT_ID/CLIENT_SECRET` env secrets in `dd-chain-explorer` |
+
+There is no `hml`: it was retired at v0.6.0 (operator ruling 2026-09-02) — its AWS
+stack, deploy role and DABs target are gone, not dormant.
 
 | Layer | Where | Mechanism |
 |---|---|---|

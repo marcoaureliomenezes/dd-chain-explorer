@@ -59,7 +59,7 @@ loudly**:
 
 This is expected — no infra-only job builds the layer. **Run this
 repository's artifact-publish CI job at least once first** (`dd-chain-explorer`,
-`publish-artifacts.yml`, environment `dev` or `hml` — the artifact is
+`publish-artifacts.yml`, environment `dev` or `production` — the artifact is
 environment-agnostic, content-addressed by sha256; no `prod` lane exists until
 the production Databricks environment does). It builds `dm-chain-utils` from source, computes its sha256,
 uploads it to
@@ -75,7 +75,7 @@ Every infra-only job run after that can resolve it.
    found" (not an unrelated Terraform error) — read the failing step's log,
    in `dd-chain-infrastructure`.
 2. Run this repository's (`dd-chain-explorer`) artifact-publish CI job
-   (`publish-artifacts.yml`, environment `dev` or `hml`) from the Actions tab.
+   (`publish-artifacts.yml`, environment `dev` or `production`) from the Actions tab.
 3. Confirm the object landed:
    ```
    aws s3api list-objects-v2 \

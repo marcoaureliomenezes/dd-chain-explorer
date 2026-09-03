@@ -14,7 +14,7 @@ Export Gold API key consumption views to S3
 
 | Environment | Compute | Table type | `--storage-mode` |
 |-------------|---------|------------|-----------------|
-| DEV / HML | Serverless | MANAGED | `managed` |
+| DEV | Serverless | MANAGED | `managed` |
 | PROD | Cluster | EXTERNAL (S3) | `external` |
 
 Override in `databricks.yml` for PROD target:

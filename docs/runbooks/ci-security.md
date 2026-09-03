@@ -96,8 +96,9 @@ automatically going forward.
 (drift, F-08), so an empty secret silently fell through to another environment's
 credential. The coordinator provisioned OAuth M2M service-principal **environment**
 secrets (`DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET`) on the
-`dev` and `hml` GitHub environments; `production` carries none (no prod Databricks
-workspace exists). `deploy-dabs` now reads only those three environment-scoped secrets
+`dev` and `hml` GitHub environments; `production` carried none at the time.
+*(v0.6.0, 2026-09-02: `hml` retired; `production` now carries its own three secrets
+for the official-account workspace — see `docs/cross-repo-contract.md` §5.)* `deploy-dabs` now reads only those three environment-scoped secrets
 and asserts all three are non-empty before invoking `deploy_all.sh` — a `target=prod`
 dispatch fails closed by design instead of silently deploying with an empty/wrong
 credential.

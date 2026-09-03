@@ -85,7 +85,7 @@ def main() -> None:
         "--storage-mode",
         default="managed",
         choices=["managed", "external"],
-        help="Table storage mode: managed (DEV/HML) or external (PROD)",
+        help="Table storage mode: managed (DEV) or external (PROD)",
     )
     parser.add_argument("--lakehouse-bucket", default="", help="S3 bucket for EXTERNAL tables (PROD only)")
     args = parser.parse_args()

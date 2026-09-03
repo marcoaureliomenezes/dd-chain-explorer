@@ -21,9 +21,9 @@ variables:
 
 targets:
   dev:
-    # T-R.2 F-09 (AC-19): every target runs as the service principal, never
-    # a personal identity — dev/hml previously deployed as whoever held the
-    # PAT, the exact coupling C3 set out to remove.
+    # T-R.2 F-09 (AC-19): dev runs as the Free-Edition service principal
+    # (dm_spn_user), never a personal identity — even when the operator
+    # deploys interactively.
     run_as:
       service_principal_name: "02d610ae-7682-4f91-9053-4f7ed6880d96"
     presets:
@@ -31,7 +31,7 @@ targets:
     workspace:
       # host: resolved from the DATABRICKS_HOST env var at validate/deploy
       # time (CLI 0.270 does not support variable interpolation on this
-      # authentication field). Set it to the Free-Edition workspace URL.
+      # authentication field). dev = the Free-Edition workspace URL.
       root_path: "~/.bundle/${bundle.name}/dev"
     variables:
       catalog: "dev"
@@ -52,54 +52,28 @@ targets:
             timezone_id: "UTC"
             pause_status: PAUSED
 
-  hml:
-    # T-R.2 F-09 (AC-19): every target runs as the service principal, never
-    # a personal identity — dev/hml previously deployed as whoever held the
-    # PAT, the exact coupling C3 set out to remove.
-    run_as:
-      service_principal_name: "02d610ae-7682-4f91-9053-4f7ed6880d96"
-    presets:
-      name_prefix: "[hml] "
-    workspace:
-      # host: resolved from the DATABRICKS_HOST env var at validate/deploy
-      # time (CLI 0.270 does not support variable interpolation on this
-      # authentication field). Set it to the Free-Edition workspace URL.
-      root_path: "~/.bundle/${bundle.name}/hml"
-    variables:
-      catalog: "hml"
-      ingestion_s3_bucket: "dm-chain-explorer-hml-raw-data"
-      dlt_development: false
-      dlt_continuous: false
-    resources:
-      pipelines:
-        pipeline_ethereum:
-          development: false
-      jobs:
-        workflow_trigger_ethereum:
-          # Platform parked — hml has no ingested data (dm-chain-explorer-hml-raw-data
-          # is empty). Unpause once dd-chain-capture delivers to hml.
-          schedule:
-            quartz_cron_expression: "0 */5 * * * ?"
-            timezone_id: "UTC"
-            pause_status: PAUSED
-
   prod:
     mode: production
-    # prod runs as the dm_spn_user service principal (never a personal
-    # identity) — dev/hml deploy interactively as the operator.
-    run_as:
-      service_principal_name: "02d610ae-7682-4f91-9053-4f7ed6880d96"
+    # No run_as: prod is deployed ONLY by CI, authenticated as the production
+    # workspace's own service principal (OAuth M2M, `production` GitHub
+    # environment). A service-principal deployer is the run_as identity by
+    # definition (production-mode rules), so no application id of any
+    # workspace is written here.
     workspace:
-      # host: intentionally unset. Resolved from DATABRICKS_HOST at
-      # runtime; no value is provided anywhere in this bundle because no
-      # prod Databricks workspace exists yet (ADR-002) — `validate -t
-      # prod` must fail without an explicit DATABRICKS_HOST export.
+      # host: resolved from DATABRICKS_HOST at validate/deploy time — the
+      # production workspace URL (official account), an environment secret.
       root_path: "/Workspace/.bundle/${bundle.name}/prod"
     variables:
       catalog: "prd"
       ingestion_s3_bucket: "dm-chain-explorer-lakehouse"
       dlt_development: false
       dlt_continuous: false
-    # No trigger-job schedule override here: prod is not a deployed target in
-    # this release (no prod Databricks workspace exists — ADR-002); the host
-    # guard (T-C.3) makes `validate -t prod` fail unless DATABRICKS_HOST is set.
+    resources:
+      jobs:
+        workflow_trigger_ethereum:
+          # Platform parked in prod as well — dd-chain-capture is not yet
+          # delivering to the production bucket. Unpause once raw data lands.
+          schedule:
+            quartz_cron_expression: "0 */5 * * * ?"
+            timezone_id: "UTC"
+            pause_status: PAUSED

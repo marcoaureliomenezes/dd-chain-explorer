@@ -12,15 +12,16 @@ name: Publish Artifacts
 # prefix; it never builds or uploads. This workflow never touches Terraform.
 #
 # Two ways to run:
-#   - workflow_dispatch, choosing the GitHub environment to bind the run to (dev|hml).
+#   - workflow_dispatch, choosing the GitHub environment to bind the run to
+#     (dev|production).
 #   - workflow_call, reused by .github/workflows/ci.yml's `publish` job (T-X.6) so the
 #     explorer CI's own push-triggered lane shares this exact implementation instead
 #     of a second copy (no drift between "the producer workflow" and "the CI that
 #     calls it").
 #
-# No `prod` choice: no prod Databricks/AWS environment is provisioned yet (ADR-002);
-# this run binds only to `dev`/`hml`, matching apps/dabs's own dev/hml-only CI-deploy
-# scope (T-X.7) and docs/cross-repo-contract.md §4's role trust for this repository.
+# The environment binding only scopes the OIDC `sub` claim the …-gha-artifacts-publish
+# role trusts (`environment:dev` | `environment:production`, cross-repo-contract.md
+# §4); the objects themselves are content-addressed and environment-agnostic.
 
 on:
   workflow_dispatch:
@@ -30,7 +31,7 @@ on:
         required: true
         default: dev
         type: choice
-        options: [dev, hml]
+        options: [dev, production]
   workflow_call:
     inputs:
       target:

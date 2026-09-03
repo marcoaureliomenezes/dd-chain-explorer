@@ -230,7 +230,7 @@ class ContractTransactionsCrawler:
 def _dry_run_validation(ssm_path: str, dynamodb_table: str) -> dict[str, Any]:
     """
     Validates connectivity to upstream dependencies without calling Etherscan
-    or writing to S3.  Used by the HML CI/CD Lambda test gate.
+    or writing to S3.  Used by the CI dry-run Lambda test gate.
 
     Returns a dict with:
         etherscan_keys  — number of API keys found in SSM

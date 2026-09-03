@@ -29,7 +29,7 @@ como JSON no bucket S3 de ingestão. Consumido depois por DLT (`apps/dabs/dlt_et
 | `NETWORK` | Rede Ethereum (default `mainnet`) |
 
 Suporta um evento `{"dry_run": true}` — valida conectividade SSM + DynamoDB
-sem chamar a Etherscan API nem escrever no S3; é o gate de teste do CI/CD HML.
+sem chamar a Etherscan API nem escrever no S3; é o gate de dry-run do CI.
 
 ### `gold_to_dynamodb/`
 
@@ -85,7 +85,7 @@ e passa a variável para o `terraform apply` correspondente.
 | DEV | `services/dev/02_lambda/` — `make dev_tf_apply` |
 | PRD | `services/prd/06_lambda/` — `make tf_deploy ENV=prd` (via `scripts/ci/deploy_env.sh`, gated) |
 
-Não existe stack Lambda em HML — as duas funções só rodam em `dev` e `prd`.
+As duas funções só existem em `dev` e `prd` (os únicos ambientes da plataforma).
 
 ---
 
