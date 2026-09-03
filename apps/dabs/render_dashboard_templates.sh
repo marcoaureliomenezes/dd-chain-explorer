@@ -11,24 +11,33 @@
 # The rendered .lvdash.json files are generated artifacts (see apps/dabs/.gitignore)
 # — never hand-edit them; edit the .tmpl and re-run this script.
 #
-# Usage: ./render_dashboard_templates.sh --catalog {dev|hml|prd}
+# This script is the ONE place that maps a bundle target to its Unity Catalog
+# name (dev -> dev, prod -> prd, matching apps/dabs/*/databricks.yml). Every
+# validate/deploy path (Makefile, deploy_all.sh, CI) calls it before touching a
+# dashboard bundle.
+#
+# Usage: ./render_dashboard_templates.sh --target {dev|prod}
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-CATALOG=""
+TARGET=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --catalog) CATALOG="$2"; shift 2 ;;
+    --target) TARGET="$2"; shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
 
-if [[ -z "$CATALOG" ]]; then
-  echo "Usage: $0 --catalog {dev|hml|prd}" >&2
-  exit 1
-fi
+case "$TARGET" in
+  dev)  CATALOG="dev" ;;
+  prod) CATALOG="prd" ;;
+  *)
+    echo "Usage: $0 --target {dev|prod}" >&2
+    exit 1
+    ;;
+esac
 
 count=0
 while IFS= read -r -d '' tmpl; do
@@ -43,4 +52,4 @@ if [[ "$count" -eq 0 ]]; then
   exit 1
 fi
 
-echo "Rendered $count dashboard(s) for catalog '${CATALOG}'."
+echo "Rendered $count dashboard(s) for target '${TARGET}' (catalog '${CATALOG}')."

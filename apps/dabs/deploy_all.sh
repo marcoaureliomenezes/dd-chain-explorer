@@ -9,7 +9,6 @@
 #
 # Usage:
 #   ./deploy_all.sh dev                              # Deploy all to dev
-#   ./deploy_all.sh hml                              # Deploy all to hml
 #   ./deploy_all.sh prod                             # Deploy all to prod
 #   ./deploy_all.sh dev dlt_ethereum job_ddl_setup   # Deploy specific components
 #
@@ -24,8 +23,8 @@
 #
 # The Databricks CLI (>=0.218) authenticates natively from these three env vars —
 # no `databricks configure`/profile step or PAT is used here. All three are
-# GitHub-environment-scoped secrets (dev/hml); production carries none (no prod
-# Databricks workspace exists yet).
+# GitHub-environment-scoped secrets: `dev` = the Free-Edition workspace,
+# `production` = the official-account workspace (each its own service principal).
 
 set -euo pipefail
 
@@ -51,19 +50,10 @@ echo ""
 # Dashboard bundles reference a generated, gitignored *.lvdash.json that only
 # exists after render_dashboard_templates.sh runs. A fresh CI checkout has none
 # of these files — render them here, once, before the per-component deploy loop
-# below ever calls `databricks bundle deploy`. Target->catalog: dev->dev,
-# hml->hml, prod->prd (Unity Catalog naming, apps/dabs/*/databricks.yml).
-case "$TARGET" in
-  dev)  DASHBOARD_CATALOG="dev" ;;
-  hml)  DASHBOARD_CATALOG="hml" ;;
-  prod) DASHBOARD_CATALOG="prd" ;;
-  *)
-    echo -e "${RED}ERROR: Unknown target '${TARGET}' — expected dev|hml|prod${NC}"
-    exit 1
-    ;;
-esac
-echo -e "${CYAN}[RENDER]${NC} dashboard templates -> catalog=${DASHBOARD_CATALOG}"
-"${SCRIPT_DIR}/render_dashboard_templates.sh" --catalog "${DASHBOARD_CATALOG}"
+# below ever calls `databricks bundle deploy`. The target->catalog map lives in
+# render_dashboard_templates.sh, which also rejects an unknown target.
+echo -e "${CYAN}[RENDER]${NC} dashboard templates -> target=${TARGET}"
+"${SCRIPT_DIR}/render_dashboard_templates.sh" --target "${TARGET}"
 echo ""
 
 DEPLOYED=()

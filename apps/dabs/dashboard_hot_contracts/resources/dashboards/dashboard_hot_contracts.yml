@@ -3,7 +3,7 @@ resources:
     hot_contracts:
       display_name: "Hot Contracts"
       # Generated from the sibling .lvdash.json.tmpl by
-      # ../../../render_dashboard_templates.sh --catalog {dev|hml|prd}
+      # ../../../render_dashboard_templates.sh --target {dev|prod}
       # (run before validate/deploy — dataset SQL is not bundle-templated).
       file_path: ../../src/dashboards/02_hot_contracts.lvdash.json
       warehouse_id: ${var.warehouse_id}

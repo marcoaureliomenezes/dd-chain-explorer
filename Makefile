@@ -34,6 +34,7 @@ help:
 	@echo ""
 	@echo "  Databricks Asset Bundles (apps/dabs/<bundle>/, default TARGET=dev)"
 	@echo "    make dabs_validate_all             - validate every bundle"
+	@echo "    make dabs_render TARGET=dev         - render dashboard templates (auto-run by validate/deploy)"
 	@echo "    make dabs_deploy_all TARGET=dev     - deploy every bundle"
 	@echo "    make dabs_destroy_all               - destroy every bundle (target=dev)"
 	@echo "    make dabs_run BUNDLE=<name> JOB=<key> TARGET=dev  - run one job/pipeline"
@@ -77,9 +78,15 @@ build_lambda_layer:
 
 DABS_DIR    := apps/dabs
 TARGET      ?= dev
-DEV_CATALOG ?= dev
 
-dabs_validate_all:
+# Dashboard bundles reference a generated, gitignored *.lvdash.json that only
+# exists after the template render; a fresh checkout has none. Every
+# validate/deploy target below depends on this one, so CI and the operator
+# never validate a dashboard bundle against a missing file.
+dabs_render:
+	@$(DABS_DIR)/render_dashboard_templates.sh --target $(TARGET)
+
+dabs_validate_all: dabs_render
 	@echo ">>> Validating every apps/dabs bundle (target=$(TARGET))..."
 	@FAILED=""; \
 	for d in $(DABS_DIR)/*/; do \
@@ -95,7 +102,7 @@ dabs_validate_all:
 	if [ -n "$$FAILED" ]; then echo "FAILED:$$FAILED"; exit 1; fi
 	@echo ">>> All bundles OK."
 
-dabs_deploy_all:
+dabs_deploy_all: dabs_render
 	@echo ">>> Deploying every apps/dabs bundle (target=$(TARGET))..."
 	@for d in $(DABS_DIR)/*/; do \
 	  name=$$(basename "$$d"); \
@@ -136,7 +143,7 @@ dabs_run_export_gold:
 # Deploys every dashboard_* bundle with the first available SQL Warehouse id
 # auto-discovered and passed as --var warehouse_id (falls back to no --var if
 # the CLI/warehouse lookup is unavailable, matching each bundle's own default).
-dabs_deploy_dashboards:
+dabs_deploy_dashboards: dabs_render
 	@echo ">>> Deploying dashboards (target=$(TARGET))..."
 	@_WH_ID=$$(databricks warehouses list --output json 2>/dev/null \
 	  | python3 -c "import sys,json; whs=json.load(sys.stdin).get('warehouses',[]); print(next((w['id'] for w in whs),''))" 2>/dev/null); \

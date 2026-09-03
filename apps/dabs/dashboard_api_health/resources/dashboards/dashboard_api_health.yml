@@ -3,7 +3,7 @@ resources:
     api_health:
       display_name: "API Health"
       # Generated from the sibling .lvdash.json.tmpl by
-      # ../../../render_dashboard_templates.sh --catalog {dev|hml|prd}
+      # ../../../render_dashboard_templates.sh --target {dev|prod}
       # (run before validate/deploy — dataset SQL is not bundle-templated).
       file_path: ../../src/dashboards/04_api_health.lvdash.json
       warehouse_id: ${var.warehouse_id}
